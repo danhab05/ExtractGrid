@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import styles from "./page.module.css";
 
 const BANK_OPTIONS = [
@@ -23,6 +23,7 @@ export default function Home() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [dragActive, setDragActive] = useState(false);
+  const dragCounter = useRef(0);
 
   const fileLabel = useMemo(() => {
     if (!file) return "Selectionner un PDF (max 15MB)";
@@ -35,7 +36,7 @@ export default function Home() {
     setSuccess("");
 
     if (!file) {
-      setError("Merci de selectionner un PDF.");
+      setError("Merci de sélectionner un PDF.");
       return;
     }
 
@@ -66,7 +67,7 @@ export default function Home() {
       anchor.click();
       anchor.remove();
       window.URL.revokeObjectURL(url);
-      setSuccess("Conversion terminee. Le fichier est telecharge.");
+      setSuccess("Conversion terminée. Le fichier est téléchargé.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erreur inattendue.");
     } finally {
@@ -94,7 +95,7 @@ export default function Home() {
         const payload = (await response.json().catch(() => null)) as
           | { error?: string }
           | null;
-        throw new Error(payload?.error || "Detection impossible.");
+        throw new Error(payload?.error || "Détection impossible.");
       }
       const payload = (await response.json()) as { bankId?: string | null };
       const detected = payload.bankId ?? null;
@@ -118,14 +119,37 @@ export default function Home() {
 
   const handleDrop = async (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
+    event.stopPropagation();
+    dragCounter.current = 0;
     setDragActive(false);
     const droppedFile = event.dataTransfer.files?.[0] ?? null;
     if (!droppedFile) return;
     if (droppedFile.type !== "application/pdf") {
-      setError("Merci de deposer un PDF.");
+      setError("Merci de déposer un PDF.");
       return;
     }
     await processFile(droppedFile);
+  };
+
+  const handleDragEnter = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    dragCounter.current += 1;
+    setDragActive(true);
+  };
+
+  const handleDragLeave = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    dragCounter.current -= 1;
+    if (dragCounter.current <= 0) {
+      setDragActive(false);
+    }
+  };
+
+  const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
   };
 
   const handleBankChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
@@ -138,96 +162,147 @@ export default function Home() {
   )?.label;
 
   return (
-    <div className={styles.page}>
-      <main className={styles.main}>
-        <section className={styles.hero}>
+    <div
+      className={styles.page}
+      onDragEnter={handleDragEnter}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      <div className={styles.glow} aria-hidden="true" />
+      <div
+        className={`${styles.dropOverlay} ${
+          dragActive ? styles.dropOverlayActive : ""
+        }`}
+        aria-hidden="true"
+      >
+        Déposez le PDF pour lancer la conversion
+      </div>
+      <main className={styles.shell}>
+        <header className={styles.header}>
           <div className={styles.brand}>
             <img
               src="/extractgrid.png"
               alt="ExtractGrid"
               className={styles.logo}
             />
-            <span>ExtractGrid</span>
+            <div>
+              <span className={styles.brandName}>ExtractGrid</span>
+              <span className={styles.brandTag}>PDF vers Excel</span>
+            </div>
+          </div>
+          <div className={styles.headerBadge}>Conversion instantanée</div>
+        </header>
+
+        <section className={styles.hero}>
+          <div className={styles.heroText}>
+            <p className={styles.kicker}>Relevés bancaires pros</p>
+            <h1>Transformez vos relevés PDF en Excel pour vos logiciels de compta.</h1>
+            <p className={styles.subtext}>
+              Importez un PDF, vérifiez la banque, téléchargez l'Excel.
+            </p>
           </div>
         </section>
 
-        <section className={styles.card}>
-          <form onSubmit={handleSubmit} className={styles.form}>
-            <label className={styles.field}>
-              <span>PDF de releve</span>
-              <div
-                className={`${styles.dropZone} ${
-                  dragActive ? styles.dropActive : ""
-                }`}
-                onDragEnter={(event) => {
-                  event.preventDefault();
-                  setDragActive(true);
-                }}
-                onDragOver={(event) => {
-                  event.preventDefault();
-                }}
-                onDragLeave={(event) => {
-                  event.preventDefault();
-                  setDragActive(false);
-                }}
-                onDrop={handleDrop}
-              >
-                <input
-                  type="file"
-                  accept="application/pdf"
-                  onChange={handleFileChange}
-                  disabled={loading}
-                />
-                <span className={styles.dropHint}>
-                  Glisser-deposer ou cliquer pour choisir un PDF
-                </span>
-              </div>
-              <span className={styles.fileName}>{fileLabel}</span>
-            </label>
-
-            {file && !detecting && (
-              <>
-                <label className={styles.field}>
-                  <span>Banque</span>
-                  <select
-                    value={bank}
-                    onChange={handleBankChange}
+        <section className={styles.content}>
+          <section className={styles.formCard}>
+            <form onSubmit={handleSubmit} className={styles.form}>
+              <label className={styles.field}>
+                <span>PDF de relevé</span>
+                <div
+                  className={`${styles.dropZone} ${
+                    dragActive ? styles.dropActive : ""
+                  }`}
+                >
+                  <input
+                    type="file"
+                    accept="application/pdf"
+                    onChange={handleFileChange}
                     disabled={loading}
-                  >
-                    {BANK_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                  <span className={styles.hint}>
+                  />
+                  <span className={styles.dropHint}>
+                    Glisser-déposer ou cliquer pour choisir un PDF
+                  </span>
+                  <span className={styles.dropMeta}>
+                    Format accepté: PDF, 15MB max
+                  </span>
+                </div>
+                <span className={styles.fileName}>{fileLabel}</span>
+              </label>
+
+              {file && !detecting && (
+                <>
+                  <label className={styles.field}>
+                    <span>Banque</span>
+                    <select
+                      value={bank}
+                      onChange={handleBankChange}
+                      disabled={loading}
+                    >
+                      {BANK_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    <span className={styles.hint}>
                     {detectedBank &&
-                      `Banque detectee : ${detectedLabel} (modifiable)`}
-                    {!detectedBank && "Banque non detectee, selection manuelle."}
+                      `Banque détectée : ${detectedLabel} (modifiable)`}
+                    {!detectedBank &&
+                        "Banque non détectée, sélection manuelle."}
                     {detectError && detectError}
                   </span>
                 </label>
 
-                <button type="submit" className={styles.cta} disabled={loading}>
-                  {loading ? (
-                    "Conversion en cours..."
-                  ) : (
-                    <>
-                      <img
-                        src="/extractgrid.png"
-                        alt=""
-                        className={styles.buttonIcon}
-                      />
-                      Convertir
-                    </>
-                  )}
-                </button>
-              </>
-            )}
+                  <div className={styles.ctaWrap}>
+                    <button
+                      type="submit"
+                      className={styles.cta}
+                      disabled={loading}
+                    >
+                      {loading ? (
+                        "Conversion en cours..."
+                      ) : (
+                        <>
+                          <img
+                            src="/extractgrid.png"
+                            alt=""
+                            className={styles.buttonIcon}
+                          />
+                          Convertir
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </>
+              )}
 
-            {error && <p className={styles.error}>{error}</p>}
-            {success && <p className={styles.success}>{success}</p>}
-          </form>
+              {detecting && (
+                <p className={styles.loading}>Détection en cours...</p>
+              )}
+              {error && <p className={styles.error}>{error}</p>}
+              {success && <p className={styles.success}>{success}</p>}
+            </form>
+          </section>
+
+          <aside className={styles.sideCard}>
+            <div className={styles.sideTitle}>Banques prises en charge</div>
+            <div className={styles.bankGrid}>
+              {BANK_OPTIONS.map((option) => (
+                <div key={option.value} className={styles.bankTag}>
+                  {option.label}
+                </div>
+              ))}
+            </div>
+            <div className={styles.sideBlock}>
+              <h3>Colonnes exportées</h3>
+              <p>DATE, PIECE, LIBELLE, DEBIT, CREDIT</p>
+            </div>
+            <div className={styles.sideBlock}>
+              <h3>Confidentialité</h3>
+              <p>Traitement local, aucun stockage de fichier.</p>
+            </div>
+          </aside>
         </section>
 
         <footer className={styles.copyright}>

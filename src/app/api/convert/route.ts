@@ -36,7 +36,7 @@ export async function POST(request: Request) {
     const parser = parserRegistry[bank];
     if (!parser) {
       return NextResponse.json(
-        { error: "Banque non supportée pour le moment." },
+        { error: "Banque non supporteeée pour le moment." },
         { status: 400 }
       );
     }
@@ -45,7 +45,7 @@ export async function POST(request: Request) {
     const transactions = await parser.parse(buffer);
     const workbookBuffer = await buildWorkbook(transactions);
 
-    return new NextResponse(workbookBuffer, {
+    return new NextResponse(new Uint8Array(workbookBuffer), {
       status: 200,
       headers: {
         "Content-Type":
@@ -77,3 +77,4 @@ export async function POST(request: Request) {
     );
   }
 }
+

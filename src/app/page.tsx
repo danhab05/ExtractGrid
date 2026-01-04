@@ -147,7 +147,7 @@ export default function Home() {
               <span className={styles.fileName}>{fileLabel}</span>
             </label>
 
-            {detectedBank && (
+            {file && !detecting && (
               <>
                 <label className={styles.field}>
                   <span>Banque</span>
@@ -163,11 +163,10 @@ export default function Home() {
                     ))}
                   </select>
                   <span className={styles.hint}>
-                    {detecting && "Detection de la banque en cours..."}
-                    {!detecting &&
-                      detectedBank &&
+                    {detectedBank &&
                       `Banque detectee : ${detectedLabel} (modifiable)`}
-                    {!detecting && detectError && detectError}
+                    {!detectedBank && "Banque non detectee, selection manuelle."}
+                    {detectError && detectError}
                   </span>
                 </label>
 

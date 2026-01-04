@@ -1,4 +1,4 @@
-import { DOMMatrix } from "dommatrix";
+import DOMMatrix from "dommatrix";
 
 const globalAny = globalThis as typeof globalThis & {
   DOMMatrix?: typeof DOMMatrix;

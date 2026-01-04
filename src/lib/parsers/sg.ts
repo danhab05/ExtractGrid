@@ -315,7 +315,7 @@ async function parseSgPdf(buffer: Buffer): Promise<Transaction[]> {
     const resolvedAmount =
       textAmount ?? creditAmount ?? debitAmount ?? null;
 
-    if (startsWithDate) {
+    if (startsWithDate && dateTokens[0] && dateTokens[1] && dateItems[1]) {
       if (current) {
         transactions.push({
           dateOperation: current.dateOperation,

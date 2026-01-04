@@ -20,6 +20,7 @@ Ouvrez http://localhost:3000
 Banques prises en charge :
 
 - BNP Paribas
+- CIC
 - LCL
 - Banque Populaire
 - Société Générale
@@ -40,7 +41,7 @@ Endpoint : `POST /api/convert`
 FormData :
 
 - `file` : PDF
-- `bank` : `bnp`, `lcl`, `banque-populaire`, `societe-generale`, `qonto`
+- `bank` : `bnp`, `cic`, `lcl`, `banque-populaire`, `societe-generale`, `qonto`
 
 Endpoint : `POST /api/detect`
 
@@ -48,7 +49,7 @@ FormData :
 
 - `file` : PDF
 
-Réponse : `{ bankId: "bnp" | "lcl" | "banque-populaire" | "societe-generale" | "qonto" | null }`
+Réponse : `{ bankId: "bnp" | "cic" | "lcl" | "banque-populaire" | "societe-generale" | "qonto" | null }`
 
 ## Mode debug (extraction texte)
 

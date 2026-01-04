@@ -11,7 +11,7 @@ export async function loadPdfJs() {
     globalAny.DOMMatrix = DOMMatrix;
   }
   if (!globalAny.ImageData) {
-    globalAny.ImageData = class ImageData {
+    const ImageDataPolyfill = class ImageData {
       data: Uint8ClampedArray;
       width: number;
       height: number;
@@ -25,6 +25,7 @@ export async function loadPdfJs() {
         this.height = height;
       }
     };
+    globalAny.ImageData = ImageDataPolyfill as unknown as typeof ImageData;
   }
   if (!globalAny.Path2D) {
     globalAny.Path2D = class Path2D {};

@@ -1,65 +1,201 @@
-import Image from "next/image";
+﻿"use client";
+
+import { useMemo, useState } from "react";
 import styles from "./page.module.css";
 
+const BANK_OPTIONS = [
+  { value: "bnp", label: "BNP Paribas" },
+  { value: "banque-populaire", label: "Banque Populaire" },
+  { value: "qonto", label: "Qonto" },
+  { value: "lcl", label: "LCL" },
+  { value: "cic", label: "CIC" },
+  { value: "societe-generale", label: "Societe Generale" },
+];
+
 export default function Home() {
+  const [bank, setBank] = useState("bnp");
+  const [file, setFile] = useState<File | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [detecting, setDetecting] = useState(false);
+  const [detectedBank, setDetectedBank] = useState<string | null>(null);
+  const [detectError, setDetectError] = useState("");
+  const [manualOverride, setManualOverride] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  const fileLabel = useMemo(() => {
+    if (!file) return "Selectionner un PDF (max 15MB)";
+    return `${file.name} (${Math.round(file.size / 1024)} KB)`;
+  }, [file]);
+
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError("");
+    setSuccess("");
+
+    if (!file) {
+      setError("Merci de selectionner un PDF.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("bank", bank);
+
+      const response = await fetch("/api/convert", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as
+          | { error?: string }
+          | null;
+        throw new Error(payload?.error || "Conversion impossible.");
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = "operations.xlsx";
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.URL.revokeObjectURL(url);
+      setSuccess("Conversion terminee. Le fichier est telecharge.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erreur inattendue.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleFileChange = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const selectedFile = event.target.files?.[0] ?? null;
+    setFile(selectedFile);
+    setDetectedBank(null);
+    setDetectError("");
+    setManualOverride(false);
+
+    if (!selectedFile) return;
+
+    setDetecting(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", selectedFile);
+      const response = await fetch("/api/detect", {
+        method: "POST",
+        body: formData,
+      });
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as
+          | { error?: string }
+          | null;
+        throw new Error(payload?.error || "Detection impossible.");
+      }
+      const payload = (await response.json()) as { bankId?: string | null };
+      const detected = payload.bankId ?? null;
+      setDetectedBank(detected);
+      if (detected) {
+        setBank(detected);
+      }
+    } catch (err) {
+      setDetectError(err instanceof Error ? err.message : "Erreur inattendue.");
+    } finally {
+      setDetecting(false);
+    }
+  };
+
+  const handleBankChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    setBank(event.target.value);
+    setManualOverride(true);
+  };
+
+  const detectedLabel = BANK_OPTIONS.find(
+    (option) => option.value === detectedBank
+  )?.label;
+
   return (
     <div className={styles.page}>
       <main className={styles.main}>
-        <Image
-          className={styles.logo}
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className={styles.intro}>
-          <h1>To get started, edit the page.tsx file.</h1>
-          <p>
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className={styles.ctas}>
-          <a
-            className={styles.primary}
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
+        <section className={styles.hero}>
+          <div className={styles.brand}>
+            <img
+              src="/extractgrid.png"
+              alt="ExtractGrid"
               className={styles.logo}
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
             />
-            Deploy Now
-          </a>
-          <a
-            className={styles.secondary}
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
+            <span>ExtractGrid</span>
+          </div>
+        </section>
+
+        <section className={styles.card}>
+          <form onSubmit={handleSubmit} className={styles.form}>
+            <label className={styles.field}>
+              <span>PDF de releve</span>
+              <input
+                type="file"
+                accept="application/pdf"
+                onChange={handleFileChange}
+                disabled={loading}
+              />
+              <span className={styles.fileName}>{fileLabel}</span>
+            </label>
+
+            {detectedBank && (
+              <>
+                <label className={styles.field}>
+                  <span>Banque</span>
+                  <select
+                    value={bank}
+                    onChange={handleBankChange}
+                    disabled={loading}
+                  >
+                    {BANK_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <span className={styles.hint}>
+                    {detecting && "Detection de la banque en cours..."}
+                    {!detecting &&
+                      detectedBank &&
+                      `Banque detectee : ${detectedLabel} (modifiable)`}
+                    {!detecting && detectError && detectError}
+                  </span>
+                </label>
+
+                <button type="submit" className={styles.cta} disabled={loading}>
+                  {loading ? (
+                    "Conversion en cours..."
+                  ) : (
+                    <>
+                      <img
+                        src="/extractgrid.png"
+                        alt=""
+                        className={styles.buttonIcon}
+                      />
+                      Convertir
+                    </>
+                  )}
+                </button>
+              </>
+            )}
+
+            {error && <p className={styles.error}>{error}</p>}
+            {success && <p className={styles.success}>{success}</p>}
+          </form>
+        </section>
+
+        <footer className={styles.copyright}>
+          © 2026 Habib Dan
+        </footer>
       </main>
     </div>
   );

@@ -1,36 +1,80 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+﻿# PDF Relevé -> Excel (Next.js)
 
-## Getting Started
+MVP pour convertir un relevé bancaire PDF en fichier Excel standardisé.
 
-First, run the development server:
+## Démarrage
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Ouvrez http://localhost:3000
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Utilisation
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- Sélectionner un PDF de relevé (max 15MB)
+- Détection automatique de la banque (modifiable)
+- Cliquer sur "Convertir" pour télécharger un `.xlsx`
 
-## Learn More
+Banques prises en charge :
 
-To learn more about Next.js, take a look at the following resources:
+- BNP Paribas
+- LCL
+- Banque Populaire
+- Société Générale
+- Qonto
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Le fichier contient une feuille "Feuille 1" avec les colonnes :
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- DATE (dd/mm/yyyy)
+- PIECE (mois)
+- LIBELLE
+- DEBIT
+- CREDIT
 
-## Deploy on Vercel
+## API
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Endpoint : `POST /api/convert`
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+FormData :
+
+- `file` : PDF
+- `bank` : `bnp`, `lcl`, `banque-populaire`, `societe-generale`, `qonto`
+
+Endpoint : `POST /api/detect`
+
+FormData :
+
+- `file` : PDF
+
+Réponse : `{ bankId: "bnp" | "lcl" | "banque-populaire" | "societe-generale" | "qonto" | null }`
+
+## Mode debug (extraction texte)
+
+Pour diagnostiquer un PDF non reconnu :
+
+```bash
+PDF_TEXT_DEBUG=1 npm run dev
+```
+
+En cas d’échec, l’API renverra un fichier `extraction.txt` contenant le texte extrait.
+
+## Ajouter une banque
+
+1. Créer un nouveau parser dans `src/lib/parsers/` (ex: `mybank.ts`) et implémenter `BankParser`.
+2. Enregistrer le parser dans `src/lib/parsers/index.ts`.
+3. Ajouter l’option dans `src/app/page.tsx`.
+
+Le parser reçoit du texte PDF ou un buffer et doit retourner `Transaction[]`.
+
+## Tests
+
+```bash
+npm run test
+```
+
+## Limites connues
+
+- Parsing basé sur extraction texte (PDF non scanné requis).
+- Certaines opérations peuvent nécessiter des heuristiques si le PDF ne conserve pas les colonnes.

@@ -22,6 +22,7 @@ export default function Home() {
   const [manualOverride, setManualOverride] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [dragActive, setDragActive] = useState(false);
 
   const fileLabel = useMemo(() => {
     if (!file) return "Selectionner un PDF (max 15MB)";
@@ -73,10 +74,7 @@ export default function Home() {
     }
   };
 
-  const handleFileChange = async (
-    event: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    const selectedFile = event.target.files?.[0] ?? null;
+  const processFile = async (selectedFile: File | null) => {
     setFile(selectedFile);
     setDetectedBank(null);
     setDetectError("");
@@ -111,6 +109,25 @@ export default function Home() {
     }
   };
 
+  const handleFileChange = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const selectedFile = event.target.files?.[0] ?? null;
+    await processFile(selectedFile);
+  };
+
+  const handleDrop = async (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setDragActive(false);
+    const droppedFile = event.dataTransfer.files?.[0] ?? null;
+    if (!droppedFile) return;
+    if (droppedFile.type !== "application/pdf") {
+      setError("Merci de deposer un PDF.");
+      return;
+    }
+    await processFile(droppedFile);
+  };
+
   const handleBankChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     setBank(event.target.value);
     setManualOverride(true);
@@ -138,12 +155,33 @@ export default function Home() {
           <form onSubmit={handleSubmit} className={styles.form}>
             <label className={styles.field}>
               <span>PDF de releve</span>
-              <input
-                type="file"
-                accept="application/pdf"
-                onChange={handleFileChange}
-                disabled={loading}
-              />
+              <div
+                className={`${styles.dropZone} ${
+                  dragActive ? styles.dropActive : ""
+                }`}
+                onDragEnter={(event) => {
+                  event.preventDefault();
+                  setDragActive(true);
+                }}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                }}
+                onDragLeave={(event) => {
+                  event.preventDefault();
+                  setDragActive(false);
+                }}
+                onDrop={handleDrop}
+              >
+                <input
+                  type="file"
+                  accept="application/pdf"
+                  onChange={handleFileChange}
+                  disabled={loading}
+                />
+                <span className={styles.dropHint}>
+                  Glisser-deposer ou cliquer pour choisir un PDF
+                </span>
+              </div>
               <span className={styles.fileName}>{fileLabel}</span>
             </label>
 

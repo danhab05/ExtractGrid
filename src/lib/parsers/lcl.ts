@@ -11,7 +11,7 @@ import {
 } from "./utils";
 
 type LineItem = { text: string; x: number };
-type PdfLine = { text: string; items: LineItem[] };
+type PdfLine = { text: string; items: LineItem[]; page: number };
 
 const IGNORE_LINE_PATTERNS = [
   /SOLDE\s+INTERMEDIAIRE/i,
@@ -32,6 +32,11 @@ const SECTION_KEYWORDS = [
   "CHEQUES",
 ];
 
+const SHORT_DATE_REGEX = /^\d{2}[./]\d{2}$/;
+const LONG_DATE_REGEX = /^\d{2}[./]\d{2}[./]\d{2,4}$/;
+const ANY_DATE_REGEX = /\b\d{2}[./]\d{2}(?:[./]\d{2,4})?\b/;
+const CARD_VALUE_DATE_REGEX = /\d{2}\/\d{2}\/\d{4}/;
+
 function shouldIgnoreLine(line: string): boolean {
   return IGNORE_LINE_PATTERNS.some((pattern) => pattern.test(line));
 }
@@ -47,6 +52,40 @@ function normalizeDateToken(token: string): string {
   if (!match) return normalized;
   const year = match[3].slice(-2);
   return `${match[1]}.${match[2]}.${year}`;
+}
+
+function findPeriodStart(lines: PdfLine[]): Date | null {
+  for (const line of lines) {
+    const match = line.text.match(/du\s+(\d{2}[./]\d{2}[./]\d{4})/i);
+    if (match) {
+      const token = normalizeDateToken(match[1]);
+      return parseDateFR(token);
+    }
+  }
+  return null;
+}
+
+function resolveDateItems(line: PdfLine) {
+  const dateItems = line.items.filter((it) =>
+    ANY_DATE_REGEX.test(it.text.trim())
+  );
+  const shortItems = dateItems
+    .filter((it) => SHORT_DATE_REGEX.test(it.text.trim()))
+    .sort((a, b) => a.x - b.x);
+  const longItems = dateItems
+    .filter((it) => LONG_DATE_REGEX.test(it.text.trim()))
+    .sort((a, b) => a.x - b.x);
+
+  const operationItem = shortItems[0] ?? longItems[0] ?? null;
+  const valueItem = longItems.length > 0 ? longItems[longItems.length - 1] : null;
+
+  return { operationItem, valueItem };
+}
+
+function parseCardValueDate(text: string): Date | null {
+  const match = text.match(CARD_VALUE_DATE_REGEX);
+  if (!match) return null;
+  return parseDateFR(normalizeDateToken(match[0]));
 }
 
 async function extractLinesFromPdf(buffer: Buffer): Promise<PdfLine[]> {
@@ -92,7 +131,7 @@ async function extractLinesFromPdf(buffer: Buffer): Promise<PdfLine[]> {
           .filter((it) => it.text.trim().length > 0)
           .sort((a, b) => a.x - b.x);
         const text = normalizeSpaces(ordered.map((it) => it.text).join(" "));
-        return { text, items: ordered };
+        return { text, items: ordered, page: pageNum };
       })
       .filter((line) => line.text.length > 0);
 
@@ -108,7 +147,9 @@ function parseLclLines(lines: PdfLine[]): Transaction[] {
   let creditX: number | null = null;
   let currentSection: string | undefined;
   const transactions: Transaction[] = [];
-  let periodStart: Date | null = null;
+  const periodStart = findPeriodStart(lines);
+  const cardTransactions: Transaction[] = [];
+  let cardDetailsFound = false;
 
   for (const line of lines) {
     const upper = line.text.toUpperCase();
@@ -132,18 +173,11 @@ function parseLclLines(lines: PdfLine[]): Transaction[] {
   for (const line of lines) {
     const text = line.text;
     if (!text) continue;
-    if (!periodStart) {
-      const periodMatch = text.match(/du\s+(\d{2}[./]\d{2}[./]\d{4})/i);
-      if (periodMatch) {
-        const token = normalizeDateToken(periodMatch[1]);
-        periodStart = parseDateFR(token);
-      }
-    }
+    const upper = text.toUpperCase();
     if (shouldIgnoreLine(text)) {
       continue;
     }
 
-    const upper = text.toUpperCase();
     const sectionMatch = SECTION_KEYWORDS.find((keyword) =>
       upper.includes(keyword)
     );
@@ -160,10 +194,7 @@ function parseLclLines(lines: PdfLine[]): Transaction[] {
       continue;
     }
 
-    const dateOpMatch = text.match(/\b\d{2}[./]\d{2}\b/);
-    const dateValueMatch = text.match(
-      /\b\d{2}[./]\d{2}[./]\d{2,4}\b/
-    );
+    const { operationItem, valueItem } = resolveDateItems(line);
 
     if (/ANCIEN\s+SOLDE/i.test(text)) {
       const amountMatch = text.match(
@@ -183,7 +214,7 @@ function parseLclLines(lines: PdfLine[]): Transaction[] {
               : -1;
         }
         const fallbackDate = periodStart ?? new Date();
-        const dateOpToken = dateOpMatch?.[0]?.replace(/\//g, ".");
+        const dateOpToken = operationItem?.text.replace(/\//g, ".");
         const dateOperation = dateOpToken
           ? parseShortDate(dateOpToken, fallbackDate)
           : fallbackDate;
@@ -198,14 +229,14 @@ function parseLclLines(lines: PdfLine[]): Transaction[] {
       continue;
     }
 
-    if (!dateOpMatch || !dateValueMatch) {
+    if (!operationItem || !valueItem) {
       continue;
     }
 
-    const valueToken = normalizeDateToken(dateValueMatch[0]);
+    const valueToken = normalizeDateToken(valueItem.text);
     const valueDate = parseDateFR(valueToken);
     const operationDate = parseShortDate(
-      dateOpMatch[0].replace(/\//g, "."),
+      operationItem.text.replace(/\//g, "."),
       valueDate
     );
 
@@ -242,19 +273,11 @@ function parseLclLines(lines: PdfLine[]): Transaction[] {
       amountValue = amount * sign;
     }
 
-    const dateOpIndex = line.items.findIndex((it) =>
-      it.text.includes(dateOpMatch[0])
-    );
-    const valueIndex = line.items.findIndex((it) =>
-      it.text.includes(dateValueMatch[0])
-    );
-    const amountIndex = line.items.findIndex((it) =>
-      /\d{1,3}(?:[ \u00A0]\d{3})*,\d{2}/.test(it.text)
-    );
-    const labelEnd =
-      valueIndex > -1 ? valueIndex : amountIndex > -1 ? amountIndex : undefined;
+    const amountItem = amountItems[amountItems.length - 1];
+    const labelRightBound =
+      valueItem?.x ?? amountItem?.x ?? Number.POSITIVE_INFINITY;
     const labelParts = line.items
-      .slice(dateOpIndex + 1, labelEnd)
+      .filter((it) => it.x > operationItem.x + 1 && it.x < labelRightBound - 1)
       .map((it) => it.text)
       .filter((part) => part.trim().length > 0);
     const label = normalizeSpaces(labelParts.join(" ")) || text;
@@ -275,7 +298,61 @@ function parseLclLines(lines: PdfLine[]): Transaction[] {
     });
   }
 
-  return transactions;
+  let cardValueDate: Date | null = null;
+  for (const line of lines) {
+    if (/MONTANT COMPTABILISE/i.test(line.text)) {
+      cardValueDate = parseCardValueDate(line.text);
+      break;
+    }
+  }
+  const cardLongDateToken = /\d{2}[./]\d{2}[./]\d{2,4}/;
+  for (const line of lines) {
+    const text = line.text;
+    const upper = text.toUpperCase();
+    if (
+      upper.includes("LIBELLE") ||
+      upper.includes("SOUS TOTAL") ||
+      upper.includes("TOTAUX") ||
+      upper.includes("MONTANT COMPTABILISE") ||
+      upper.includes("SOLDE") ||
+      upper.includes("CARTE N") ||
+      upper.includes("PAIEMENTS PAR CARTE")
+    ) {
+      continue;
+    }
+    const amounts = findAmountsInLine(text);
+    const opDateMatch = text.match(/\bLE\s*(\d{2}[./]\d{2})\b/i);
+    if (amounts.length > 0 && opDateMatch && !cardLongDateToken.test(text)) {
+      const amount = parseAmountFR(amounts[amounts.length - 1]);
+      const amountRegex = new RegExp(
+        `${amounts[amounts.length - 1].replace(".", "\\.")}$`
+      );
+      let label = normalizeSpaces(text.replace(amountRegex, ""));
+      label = normalizeSpaces(label.replace(opDateMatch[0], ""));
+
+      const fallbackDate = cardValueDate ?? periodStart ?? new Date();
+      const operationDate = parseShortDate(
+        opDateMatch[1].replace(/\//g, "."),
+        fallbackDate
+      );
+      const valueDate = cardValueDate ?? operationDate;
+
+      cardTransactions.push({
+        dateOperation: operationDate,
+        dateValeur: valueDate,
+        label,
+        amount: -Math.abs(amount),
+        meta: { raw: text, section: "PAIEMENTS PAR CARTE" },
+      });
+      cardDetailsFound = true;
+    }
+  }
+
+  const baseTransactions = cardDetailsFound
+    ? transactions.filter((tx) => !/RELEVE CB/i.test(tx.label))
+    : transactions;
+
+  return [...baseTransactions, ...cardTransactions];
 }
 
 export const lclParser: BankParser = {
@@ -295,7 +372,7 @@ export const lclParser: BankParser = {
         .split(/\r?\n/)
         .map((line) => normalizeSpaces(line))
         .filter(Boolean)
-        .map((line) => ({ text: line, items: [] }));
+        .map((line) => ({ text: line, items: [], page: 1 }));
       return parseLclLines(lines);
     }
 

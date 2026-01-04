@@ -1,5 +1,5 @@
-import { getDocument, GlobalWorkerOptions } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { getStandardFontDataUrl } from "../pdf";
+import { loadPdfJs } from "../pdfjs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import type { BankParser, Transaction } from "./types";
@@ -356,6 +356,7 @@ export const bnpParser: BankParser = {
         "build",
         "pdf.worker.min.mjs"
       );
+      const { getDocument, GlobalWorkerOptions } = await loadPdfJs();
       GlobalWorkerOptions.workerSrc = pathToFileURL(workerPath).toString();
       const loadingTask = getDocument({
         data,
@@ -387,6 +388,7 @@ export const bnpParser: BankParser = {
             "build",
             "pdf.worker.min.mjs"
           );
+          const { getDocument, GlobalWorkerOptions } = await loadPdfJs();
           GlobalWorkerOptions.workerSrc = pathToFileURL(workerPath).toString();
           const loadingTask = getDocument({
             data,

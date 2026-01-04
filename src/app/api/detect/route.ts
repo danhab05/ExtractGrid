@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { getDocument, GlobalWorkerOptions } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { parserRegistry } from "@/lib/parsers";
 import { getStandardFontDataUrl } from "@/lib/pdf";
+import { loadPdfJs } from "@/lib/pdfjs";
 
 const MAX_FILE_SIZE = 15 * 1024 * 1024;
 
@@ -18,8 +18,8 @@ async function extractPdfText(buffer: Buffer): Promise<string> {
     "build",
     "pdf.worker.min.mjs"
   );
+  const { getDocument, GlobalWorkerOptions } = await loadPdfJs();
   GlobalWorkerOptions.workerSrc = pathToFileURL(workerPath).toString();
-
   const loadingTask = getDocument({
     data: new Uint8Array(buffer),
     standardFontDataUrl: getStandardFontDataUrl(),

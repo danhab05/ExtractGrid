@@ -1,7 +1,7 @@
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { getDocument, GlobalWorkerOptions } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { getStandardFontDataUrl } from "../pdf";
+import { loadPdfJs } from "../pdfjs";
 import type { BankParser, Transaction } from "./types";
 import {
   findAmountsInLine,
@@ -58,8 +58,8 @@ async function extractLinesFromPdf(buffer: Buffer): Promise<PdfLine[]> {
     "build",
     "pdf.worker.min.mjs"
   );
+  const { getDocument, GlobalWorkerOptions } = await loadPdfJs();
   GlobalWorkerOptions.workerSrc = pathToFileURL(workerPath).toString();
-
   const loadingTask = getDocument({
     data: new Uint8Array(buffer),
     standardFontDataUrl: getStandardFontDataUrl(),

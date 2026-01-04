@@ -28,7 +28,8 @@ export async function loadPdfJs() {
     globalAny.ImageData = ImageDataPolyfill as unknown as typeof ImageData;
   }
   if (!globalAny.Path2D) {
-    globalAny.Path2D = class Path2D {};
+    const Path2DPolyfill = class Path2D {};
+    globalAny.Path2D = Path2DPolyfill as unknown as typeof Path2D;
   }
   return import("pdfjs-dist/legacy/build/pdf.mjs");
 }

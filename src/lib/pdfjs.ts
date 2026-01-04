@@ -2,8 +2,8 @@ import DOMMatrix from "dommatrix";
 
 const globalAny = globalThis as typeof globalThis & {
   DOMMatrix?: typeof DOMMatrix;
-  ImageData?: typeof ImageData;
-  Path2D?: typeof Path2D;
+  ImageData?: unknown;
+  Path2D?: unknown;
 };
 
 export async function loadPdfJs() {

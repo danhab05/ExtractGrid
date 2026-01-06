@@ -8,9 +8,9 @@ const formatDateSlash = (date: Date | null): string => {
   return `${day}/${month}/${year}`;
 };
 
-const getPieceNumber = (date: Date | null): number | "" => {
+const getMonthNumber = (date: Date | null): string | "" => {
   if (!date) return "";
-  return date.getUTCMonth() + 1;
+  return `${date.getUTCMonth() + 1}`.padStart(2, "0");
 };
 
 export async function buildWorkbook(transactions: Transaction[]): Promise<Buffer> {
@@ -19,7 +19,9 @@ export async function buildWorkbook(transactions: Transaction[]): Promise<Buffer
 
   worksheet.columns = [
     { header: "DATE", key: "dateOperation", width: 14 },
-    { header: "PIECE", key: "piece", width: 10 },
+    { header: "TYPE DE JOURNAL", key: "journalType", width: 18 },
+    { header: "NUMERO DE COMPTE", key: "accountNumber", width: 18 },
+    { header: "MOIS", key: "month", width: 10 },
     { header: "LIBELLE", key: "label", width: 80 },
     { header: "DEBIT", key: "debit", width: 14 },
     { header: "CREDIT", key: "credit", width: 14 },
@@ -30,6 +32,7 @@ export async function buildWorkbook(transactions: Transaction[]): Promise<Buffer
 
   let totalDebit = 0;
   let totalCredit = 0;
+  let lastDate: Date | null = null;
 
   for (const tx of transactions) {
     const debitCents =
@@ -43,19 +46,40 @@ export async function buildWorkbook(transactions: Transaction[]): Promise<Buffer
 
     worksheet.addRow({
       dateOperation: formatDateSlash(tx.dateOperation),
-      piece: getPieceNumber(tx.dateOperation),
+      journalType: "BQ",
+      accountNumber: "471000",
+      month: getMonthNumber(tx.dateOperation),
       label: tx.label,
       debit,
       credit,
     });
+
+    if (!lastDate || tx.dateOperation > lastDate) {
+      lastDate = tx.dateOperation;
+    }
   }
 
+  const lastDateFormatted = formatDateSlash(lastDate);
+  const lastMonth = getMonthNumber(lastDate);
+
   worksheet.addRow({
-    dateOperation: "",
-    piece: "",
-    label: "TOTAL",
-    debit: totalDebit / 100,
+    dateOperation: lastDateFormatted,
+    journalType: "BQ",
+    accountNumber: "512100",
+    month: lastMonth,
+    label: "",
+    debit: null,
     credit: totalCredit / 100,
+  });
+
+  worksheet.addRow({
+    dateOperation: lastDateFormatted,
+    journalType: "BQ",
+    accountNumber: "512100",
+    month: lastMonth,
+    label: "",
+    debit: totalDebit / 100,
+    credit: null,
   });
 
   return Buffer.from(await workbook.xlsx.writeBuffer());
